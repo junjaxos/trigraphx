@@ -160,6 +160,8 @@ class PersistenceLayer:
                                     entity_dict['data'].update(updates['data'])
                                 if 'metadata' in updates:
                                     entity_dict['metadata'].update(updates['metadata'])
+                                if 'deleted' in updates:
+                                    entity_dict['deleted'] = updates['deleted']
                                 entity_dict['updated_at'] = datetime.utcnow().isoformat()
                                 found = True
                             entities.append(entity_dict)
@@ -378,13 +380,21 @@ class PersistenceLayer:
         checkpoints = self.list_checkpoints()
         deleted = 0
         
+        conn = sqlite3.connect(str(self.index_db))
+        cursor = conn.cursor()
+        
         for checkpoint in checkpoints[keep_recent:]:
             try:
                 checkpoint_file = self.checkpoints_dir / f"{checkpoint['checkpoint_id']}.tar.gz"
-                checkpoint_file.unlink()
+                if checkpoint_file.exists():
+                    checkpoint_file.unlink()
+                cursor.execute("DELETE FROM checkpoints WHERE checkpoint_id = ?", (checkpoint["checkpoint_id"],))
                 deleted += 1
             except Exception as e:
                 logger.error(f"Failed to delete checkpoint: {e}")
+        
+        conn.commit()
+        conn.close()
         
         return deleted
     

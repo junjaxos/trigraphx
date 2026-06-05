@@ -9,10 +9,10 @@ from typing import List, Dict, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from trigraphx_core.entity import Entity, MetricType, SemanticEmbedding
-from trigraphx_core.space import MetricSpace
-from trigraphx_core.persistence import PersistenceLayer
-from trigraphx_core.enterprise import MetricsCollector
+from trigraphx.entity import Entity, MetricType, SemanticEmbedding
+from trigraphx.space import MetricSpace
+from trigraphx.persistence import PersistenceLayer
+from trigraphx.enterprise import MetricsCollector
 import random
 
 

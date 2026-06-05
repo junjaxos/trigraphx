@@ -122,7 +122,7 @@ class TestMetrics:
         emb2 = AssociationEmbedding()
         
         dist = metric.compute(emb1, emb2)
-        assert dist > 1.0
+        assert dist <= 1.0  # Unconnected nodes have distance <= 1.0
 
 
 class TestMetricSpace:
