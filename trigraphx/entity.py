@@ -70,6 +70,24 @@ class Entity:
             deleted=d.get("deleted", False),
         )
     
+    def add_embedding(self, metric_type: str, embedding: Any):
+        """Add an embedding to the entity.
+        
+        Args:
+            metric_type: One of 'semantic', 'hierarchy', 'association', 'causal'
+            embedding: The embedding object
+        """
+        type_map = {
+            "semantic": MetricType.SEMANTIC,
+            "hierarchy": MetricType.HIERARCHY,
+            "association": MetricType.ASSOCIATION,
+            "causal": MetricType.CAUSAL,
+        }
+        mt = type_map.get(metric_type.lower())
+        if mt is None:
+            raise ValueError(f"Unknown metric type: {metric_type}")
+        self.embeddings[mt] = embedding
+    
     def get_hash(self) -> str:
         """Get content hash for versioning."""
         content = json.dumps(self.to_dict(), sort_keys=True, default=str)
@@ -117,7 +135,13 @@ class SemanticEmbedding:
     
     @staticmethod
     def from_dict(d):
-        return SemanticEmbedding(**d)
+        vector = d.get("vector", [])
+        vector = [float(v) for v in vector]
+        return SemanticEmbedding(
+            vector=vector,
+            dimension=d.get("dimension", len(vector)),
+            quantized=d.get("quantized"),
+        )
 
 
 @dataclass
@@ -136,7 +160,14 @@ class AssociationEmbedding:
     
     @staticmethod
     def from_dict(d):
-        return AssociationEmbedding(**d)
+        # Ensure edges values are floats
+        edges = d.get("edges", {})
+        edges = {k: float(v) for k, v in edges.items()}
+        return AssociationEmbedding(
+            edges=edges,
+            bidirectional=d.get("bidirectional", True),
+            relationship_type=d.get("relationship_type", "related"),
+        )
 
 
 @dataclass

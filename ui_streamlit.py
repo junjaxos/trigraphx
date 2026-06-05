@@ -110,7 +110,7 @@ if page == "📊 总览":
                         metric_counts[emb_type] += 1
             
             df_types = pd.DataFrame({
-                "度量类型": list(metric_counts.keys()),
+                "度量类型": [m.value for m in metric_counts.keys()],
                 "数量": list(metric_counts.values())
             })
             
@@ -358,7 +358,8 @@ elif page == "📈 可视化":
                 import pyvis.network as net
                 
                 # Create network
-                g = net.Network(height="600px", directed=True, physics=True)
+                g = net.Network(height="600px", directed=True)
+                g.toggle_physics(True)
                 
                 # Add nodes
                 entity_ids = list(st.session_state.space.entities.keys())
@@ -377,7 +378,7 @@ elif page == "📈 可视化":
                         pass
                 
                 # Save and display
-                g.show("trigraphx_network.html")
+                g.save_graph("trigraphx_network.html")
                 
                 with open("trigraphx_network.html", "r") as f:
                     html_content = f.read()
@@ -541,7 +542,7 @@ elif page == "💾 数据管理":
                     if add_semantic:
                         import numpy as np
                         vec = np.random.randn(10).tolist()
-                        entity.add_embedding("semantic", SemanticEmbedding(embedding=vec))
+                        entity.add_embedding("semantic", SemanticEmbedding(vector=vec))
                     
                     if add_hierarchy:
                         entity.add_embedding("hierarchy", HierarchyEmbedding(level=1, parent=None))
@@ -682,7 +683,7 @@ elif page == "ℹ️ 帮助":
     
     # 添加语义嵌入（向量）
     embedding = SemanticEmbedding(
-        embedding=np.random.randn(10).tolist()
+        vector=np.random.randn(10).tolist()
     )
     entity.add_embedding("semantic", embedding)
     
