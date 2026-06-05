@@ -1,0 +1,18 @@
+[package]
+name = "trigraphx_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"] }
+ndarray = "0.15"
+rayon = "1.7"
+parking_lot = "0.12"
+
+[lib]
+name = "trigraphx_rust"
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "benchmark"
+path = "src/bin/benchmark.rs"
