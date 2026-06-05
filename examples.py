@@ -5,14 +5,14 @@ Example usage of TriGraphX - Complete workflow demonstration.
 import sys
 from pathlib import Path
 
-# Add trigraphx_core to path
+# Add parent directory to path for local testing
 sys.path.insert(0, str(Path(__file__).parent))
 
-from trigraphx_core import (
+from trigraphx import (
     Entity, MetricType, MetricSpace, PersistenceLayer,
     SemanticEmbedding, HierarchyEmbedding, AssociationEmbedding
 )
-from trigraphx_core.enterprise import (
+from trigraphx.enterprise import (
     RoleBasedAccessControl, Role, DataVersioning, DataEncryption,
     EntitySchema, DataQualityReport, MetricsCollector
 )

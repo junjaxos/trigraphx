@@ -15,6 +15,14 @@ from .entity import (
 from .space import MetricSpace, QueryResult
 from .persistence import PersistenceLayer
 
+# Optional Rust acceleration
+try:
+    from . import _trigraphx_rust as rust
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+    rust = None
+
 __all__ = [
     "Entity",
     "DistanceMetric",
@@ -30,4 +38,6 @@ __all__ = [
     "SemanticDistance",
     "AssociationDistance",
     "CausalDistance",
+    "_HAS_RUST",
+    "rust",
 ]

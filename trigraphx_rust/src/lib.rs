@@ -21,7 +21,7 @@ use metrics::{compute_distances_simd, compute_semantic_batch};
 use quantize::quantize_vectors_batch;
 
 #[pymodule]
-fn mrmrs_rust(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _trigraphx_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<LSHIndex>()?;
     m.add_function(wrap_pyfunction!(compute_distances_simd, m)?)?;
     m.add_function(wrap_pyfunction!(compute_semantic_batch, m)?)?;

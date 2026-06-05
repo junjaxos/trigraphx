@@ -8,17 +8,17 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-# Add trigraphx_core to path
+# Add parent directory to path for local testing
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from trigraphx_core.entity import (
+from trigraphx.entity import (
     Entity, MetricType, HierarchyEmbedding, SemanticEmbedding,
     AssociationEmbedding, CausalEmbedding,
     HierarchyDistance, SemanticDistance, AssociationDistance, CausalDistance
 )
-from trigraphx_core.space import MetricSpace, QueryResult
-from trigraphx_core.persistence import PersistenceLayer
-from trigraphx_core.enterprise import (
+from trigraphx.space import MetricSpace, QueryResult
+from trigraphx.persistence import PersistenceLayer
+from trigraphx.enterprise import (
     RoleBasedAccessControl, Role, DataEncryption, DataVersioning,
     DataLineage, EntitySchema, DataQualityReport, MetricsCollector,
     AlertingSystem

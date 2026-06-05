@@ -1,5 +1,15 @@
 """
 Setup script for TriGraphX package.
+
+For pure Python installation:
+    pip install .
+
+For Rust acceleration (requires maturin):
+    pip install maturin
+    maturin develop --release
+
+Or use pyproject.toml with maturin backend:
+    pip install .
 """
 
 from setuptools import setup, find_packages
@@ -12,12 +22,12 @@ long_description = readme_file.read_text() if readme_file.exists() else ""
 setup(
     name="trigraphx",
     version="0.1.0",
-    description="TriGraphX - Unified Metric Space Database",
+    description="TriGraphX - Unified Metric Space Database combining tree, graph, and vector storage",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="TriGraphX Contributors",
     url="https://github.com/novaos/trigraphx",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests*", "trigraphx_core*", "trigraphx_rust*"]),
     python_requires=">=3.8",
     install_requires=[
         "numpy>=1.20",
@@ -31,7 +41,7 @@ setup(
             "mypy>=0.950",
         ],
         "rust": [
-            "maturin>=0.14",
+            "maturin>=1.0",
         ],
     },
     classifiers=[
@@ -43,5 +53,9 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Rust",
+        "Topic :: Database",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )
