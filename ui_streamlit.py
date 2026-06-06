@@ -51,7 +51,15 @@ if 'space' not in st.session_state:
 
 if 'persistence' not in st.session_state:
     config.ensure_dirs()
-    st.session_state.persistence = PersistenceLayer(str(config.data_dir), batch_size=config.batch_size)
+    st.session_state.persistence = PersistenceLayer(str(config.db_root), batch_size=config.batch_size)
+
+# Reinitialize when database changes
+if st.session_state.get('db_name') != config.db_name:
+    config.db_name = st.session_state.get('db_name', config.db_name)
+    config.ensure_dirs()
+    st.session_state.space = MetricSpace(max_entities=config.max_entities)
+    st.session_state.persistence = PersistenceLayer(str(config.db_root), batch_size=config.batch_size)
+    st.session_state.query_history = []
 
 if 'query_history' not in st.session_state:
     st.session_state.query_history = []
@@ -65,6 +73,36 @@ if 'metrics_collector' not in st.session_state:
 
 st.sidebar.markdown("# 🎯 TriGraphX Dashboard")
 st.sidebar.markdown("---")
+
+# ── Database Selector ─────────────────────────────────────────────
+st.sidebar.markdown("### 🗄️ 数据库选择")
+
+existing_dbs = config.list_databases()
+db_options = existing_dbs + ["➕ 新建数据库"] if existing_dbs else ["➕ 新建数据库"]
+
+selected_db = st.sidebar.selectbox(
+    "选择或创建数据库",
+    options=db_options,
+    index=0 if config.db_name in db_options else 0
+)
+
+if selected_db == "➕ 新建数据库":
+    new_db_name = st.sidebar.text_input("数据库名称", placeholder="输入数据库名称")
+    if st.sidebar.button("创建"):
+        if new_db_name.strip():
+            config.create_database(new_db_name.strip())
+            st.session_state.db_name = new_db_name.strip()
+            st.rerun()
+        else:
+            st.sidebar.error("请输入数据库名称")
+elif selected_db != config.db_name:
+    config.db_name = selected_db
+    st.session_state.db_name = selected_db
+    st.rerun()
+
+# Show current DB
+st.sidebar.info(f"当前数据库: **{config.db_name}**")
+st.sidebar.caption(f"路径: `{config.db_root}`")
 
 page = st.sidebar.radio(
     "选择功能",
