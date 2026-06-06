@@ -518,8 +518,8 @@ elif page == "💾 数据管理":
         st.subheader("➕ 添加新实体")
         
         with st.form("add_entity_form"):
-            entity_id = st.text_input("实体ID", value=f"entity_{int(time.time())%1000}")
-            entity_data = st.text_area("实体数据 (JSON)", value='{"name": "test", "value": 100}')
+            entity_name = st.text_input("实体名称", placeholder="例如: 张三、某科技、doc_001")
+            entity_data = st.text_area("实体数据 (JSON)", value='{"type": "person", "role": "投资人"}')
             
             # Embedding options
             st.write("选择嵌入类型")
@@ -534,33 +534,41 @@ elif page == "💾 数据管理":
             submitted = st.form_submit_button("✅ 添加实体")
             
             if submitted:
-                try:
-                    data = json.loads(entity_data)
-                    entity = Entity(id=entity_id, data=data)
-                    
-                    # Add embeddings
-                    if add_semantic:
-                        import numpy as np
-                        vec = np.random.randn(10).tolist()
-                        entity.add_embedding("semantic", SemanticEmbedding(vector=vec))
-                    
-                    if add_hierarchy:
-                        entity.add_embedding("hierarchy", HierarchyEmbedding(level=1, parent=None))
-                    
-                    st.session_state.space.add_entity(entity)
-                    
-                    # Persist
+                if not entity_name.strip():
+                    st.error("❌ 请输入实体名称")
+                else:
                     try:
-                        st.session_state.persistence.save_entities_batch([entity], batch_id=f"batch_{int(time.time())}")
-                    except:
-                        pass
-                    
-                    st.success(f"✅ 成功添加实体: {entity_id}")
-                    
-                except json.JSONDecodeError:
-                    st.error("❌ JSON 格式错误")
-                except Exception as e:
-                    st.error(f"❌ 错误: {str(e)}")
+                        data = json.loads(entity_data)
+                        data["name"] = entity_name.strip()
+                        
+                        embeddings = {}
+                        if add_semantic:
+                            import numpy as np
+                            vec = np.random.randn(10).tolist()
+                            embeddings[MetricType.SEMANTIC] = SemanticEmbedding(vector=vec)
+                        if add_hierarchy:
+                            embeddings[MetricType.HIERARCHY] = HierarchyEmbedding(level=1, parent=None)
+                        
+                        entity, created = st.session_state.space.ingest(
+                            data=data,
+                            embeddings=embeddings if embeddings else None,
+                        )
+                        
+                        # Persist
+                        try:
+                            st.session_state.persistence.save_entities_batch([entity], batch_id=f"batch_{int(time.time())}")
+                        except:
+                            pass
+                        
+                        if created:
+                            st.success(f"✅ 成功添加实体: {entity.id}")
+                        else:
+                            st.info(f"ℹ️ 实体已存在，数据已合并: {entity.id}")
+                        
+                    except json.JSONDecodeError:
+                        st.error("❌ JSON 格式错误")
+                    except Exception as e:
+                        st.error(f"❌ 错误: {str(e)}")
     
     elif action == "查看实体":
         st.subheader("🔍 查看所有实体")
@@ -669,29 +677,29 @@ elif page == "ℹ️ 帮助":
     ## 快速示例
     
     ```python
-    from trigraphx import Entity, MetricSpace, SemanticEmbedding
+    from trigraphx import MetricSpace, SemanticEmbedding
     import numpy as np
     
     # 创建空间
     space = MetricSpace()
     
-    # 创建实体
-    entity = Entity(
-        id="doc_1",
-        data={"title": "Example", "content": "Hello world"}
+    # 自然语言摄入 (无需手动指定ID)
+    entity, created = space.ingest(
+        {"name": "doc_1", "title": "Example", "content": "Hello world"},
+        embeddings={
+            MetricType.SEMANTIC: SemanticEmbedding(
+                vector=np.random.randn(10).tolist()
+            )
+        }
     )
+    print(f"实体ID: {entity.id}, 新建: {created}")
     
-    # 添加语义嵌入（向量）
-    embedding = SemanticEmbedding(
-        vector=np.random.randn(10).tolist()
-    )
-    entity.add_embedding("semantic", embedding)
-    
-    # 添加到空间
-    space.add_entity(entity)
+    # 同一实体再次摄入，自动合并数据
+    entity2, created2 = space.ingest({"name": "doc_1", "author": "Alice"})
+    print(f"实体ID: {entity2.id}, 新建: {created2}")  # created2=False, 数据已合并
     
     # 查询
-    result = space.knn_query("doc_1", k=5)
+    result = space.knn_query(entity.id, k=5)
     print(f"Found {len(result.entity_ids)} neighbors")
     ```
     

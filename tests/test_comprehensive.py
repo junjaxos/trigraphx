@@ -1169,5 +1169,212 @@ class TestIntegrationComprehensive:
         assert report["completeness"] < 1.0  # Has null
 
 
+class TestIngestionPipeline:
+    """Tests for natural language ingestion pipeline with auto-ID generation."""
+
+    # --- Auto-ID Generation ---
+
+    def test_entity_auto_generates_id(self):
+        """Entity without explicit ID should auto-generate one from content hash."""
+        e = Entity(data={"name": "张三", "type": "person"})
+        assert e.id is not None
+        assert e.id != ""
+        assert "张三" in e.id  # Readable prefix
+
+    def test_entity_explicit_id_preserved(self):
+        """Entity with explicit ID should keep it."""
+        e = Entity(id="my_custom_id", data={"name": "test"})
+        assert e.id == "my_custom_id"
+
+    def test_compute_id_deterministic(self):
+        """Same content always produces the same ID."""
+        id1 = Entity.compute_id({"name": "张三", "type": "person"})
+        id2 = Entity.compute_id({"name": "张三", "type": "person"})
+        assert id1 == id2
+
+    def test_compute_id_different_content(self):
+        """Different content produces different IDs."""
+        id1 = Entity.compute_id({"name": "张三", "type": "person"})
+        id2 = Entity.compute_id({"name": "李四", "type": "person"})
+        assert id1 != id2
+
+    def test_compute_id_order_independent(self):
+        """Dict key order should not affect the ID."""
+        id1 = Entity.compute_id({"name": "张三", "age": 30})
+        id2 = Entity.compute_id({"age": 30, "name": "张三"})
+        assert id1 == id2
+
+    def test_compute_id_with_name_prefix(self):
+        """Name parameter should be used as readable prefix."""
+        id1 = Entity.compute_id({"type": "company"}, name="腾讯")
+        assert id1.startswith("腾讯_")
+
+    # --- Ingest method ---
+
+    def test_ingest_creates_entity(self):
+        """ingest() should create a new entity and return (entity, True)."""
+        space = MetricSpace(max_entities=100)
+        entity, created = space.ingest({"name": "张三", "role": "投资人"})
+        assert created is True
+        assert entity.id is not None
+        assert "张三" in entity.id
+        assert entity.data["role"] == "投资人"
+        assert space.entity_count() == 1
+
+    def test_ingest_deduplicates(self):
+        """Same content ingested twice should return same entity, created=False."""
+        space = MetricSpace(max_entities=100)
+        e1, c1 = space.ingest({"name": "张三", "role": "投资人"})
+        e2, c2 = space.ingest({"name": "张三", "role": "投资人"})
+        assert c1 is True
+        assert c2 is False  # Already exists
+        assert e1.id == e2.id
+        assert space.entity_count() == 1  # Not duplicated
+
+    def test_ingest_merges_data(self):
+        """Ingesting same entity with new fields should merge data."""
+        space = MetricSpace(max_entities=100)
+        e1, _ = space.ingest({"name": "张三", "role": "投资人"})
+        e2, _ = space.ingest({"name": "张三", "company": "某科技"})
+        assert e1.id == e2.id
+        assert e2.data["role"] == "投资人"  # Preserved from first ingest
+        assert e2.data["company"] == "某科技"  # Added from second ingest
+        assert space.entity_count() == 1
+
+    def test_ingest_with_embeddings(self):
+        """ingest() should accept pre-computed embeddings."""
+        space = MetricSpace(max_entities=100)
+        emb = SemanticEmbedding(vector=[0.1, 0.2, 0.3])
+        entity, _ = space.ingest(
+            {"name": "doc1", "content": "hello"},
+            embeddings={MetricType.SEMANTIC: emb},
+        )
+        assert MetricType.SEMANTIC in entity.embeddings
+
+    def test_ingest_multiple_distinct(self):
+        """Multiple distinct entities should all be created."""
+        space = MetricSpace(max_entities=100)
+        names = ["张三", "李四", "王五", "赵六", "钱七"]
+        for name in names:
+            entity, created = space.ingest({"name": name, "type": "person"})
+            assert created is True
+        assert space.entity_count() == 5
+
+    # --- Upsert method ---
+
+    def test_upsert_insert_new(self):
+        """upsert_entity should insert when entity doesn't exist."""
+        space = MetricSpace(max_entities=100)
+        e = Entity(id="test_1", data={"name": "test"})
+        result, created = space.upsert_entity(e)
+        assert created is True
+        assert result.id == "test_1"
+        assert space.entity_count() == 1
+
+    def test_upsert_update_existing(self):
+        """upsert_entity should update when entity already exists."""
+        space = MetricSpace(max_entities=100)
+        e1 = Entity(id="test_1", data={"name": "test", "version": 1})
+        space.add_entity(e1)
+
+        e2 = Entity(id="test_1", data={"name": "test", "version": 2})
+        result, created = space.upsert_entity(e2)
+        assert created is False
+        assert result.data["version"] == 2
+        assert space.entity_count() == 1
+
+    def test_upsert_merge_data(self):
+        """upsert with merge_data=True should preserve existing fields."""
+        space = MetricSpace(max_entities=100)
+        space.add_entity(Entity(id="e1", data={"a": 1, "b": 2}))
+
+        result, _ = space.upsert_entity(Entity(id="e1", data={"b": 99, "c": 3}))
+        assert result.data["a"] == 1   # Preserved
+        assert result.data["b"] == 99  # Updated
+        assert result.data["c"] == 3   # Added
+
+    def test_upsert_replace_data(self):
+        """upsert with merge_data=False should replace all data."""
+        space = MetricSpace(max_entities=100)
+        space.add_entity(Entity(id="e1", data={"a": 1, "b": 2}))
+
+        result, _ = space.upsert_entity(Entity(id="e1", data={"x": 99}), merge_data=False)
+        assert "a" not in result.data  # Old data gone
+        assert result.data["x"] == 99
+
+    # --- Real-world scenario: natural language extraction ---
+
+    def test_nl_scenario_basic_extraction(self):
+        """Simulate: user says "张三投资了李四的公司", tools extract entities."""
+        space = MetricSpace(max_entities=1000)
+
+        # Simulated extraction results (from NL tool)
+        extractions = [
+            {"name": "张三", "type": "person", "role": "投资人"},
+            {"name": "李四", "type": "person", "role": "创始人"},
+            {"name": "某科技", "type": "company", "industry": "AI"},
+        ]
+
+        for ext in extractions:
+            entity, created = space.ingest(ext)
+            assert created is True
+            assert entity.id is not None
+
+        assert space.entity_count() == 3
+
+    def test_nl_scenario_accumulating_knowledge(self):
+        """Simulate: multiple conversations accumulate knowledge about same entities."""
+        space = MetricSpace(max_entities=1000)
+
+        # First conversation
+        space.ingest({"name": "张三", "type": "person", "role": "投资人"})
+        space.ingest({"name": "李四", "type": "person"})
+
+        # Second conversation - more info about 张三
+        e, created = space.ingest({"name": "张三", "company": "红杉资本", "location": "北京"})
+        assert created is False  # Already exists
+        assert e.data["role"] == "投资人"  # From first conversation
+        assert e.data["company"] == "红杉资本"  # From second conversation
+        assert e.data["location"] == "北京"
+
+        # Third conversation - relationship between them
+        e1, _ = space.ingest({"name": "张三", "type": "person"})
+        e2, _ = space.ingest({"name": "李四", "type": "person"})
+
+        # Add association embedding to represent the relationship
+        assoc = AssociationEmbedding(edges={e2.id: 0.9})
+        e1.add_embedding("association", assoc)
+        assert MetricType.ASSOCIATION in e1.embeddings
+
+    def test_nl_scenario_large_scale(self):
+        """Simulate: 200 entities ingested from natural language."""
+        space = MetricSpace(max_entities=1000)
+        names = [f"entity_{i}" for i in range(200)]
+        for name in names:
+            e, created = space.ingest({"name": name, "type": "item", "index": names.index(name)})
+            assert created
+
+        assert space.entity_count() == 200
+        # Re-ingest same entities should not create duplicates
+        for name in names:
+            e, created = space.ingest({"name": name, "type": "item", "index": names.index(name)})
+            assert not created
+
+        assert space.entity_count() == 200  # Still 200
+
+    def test_nl_scenario_idempotent(self):
+        """Ingesting the same batch multiple times should be idempotent."""
+        space = MetricSpace(max_entities=1000)
+        batch = [
+            {"name": "A", "type": "task"},
+            {"name": "B", "type": "task"},
+            {"name": "C", "type": "task"},
+        ]
+        for _ in range(10):
+            for item in batch:
+                space.ingest(item)
+        assert space.entity_count() == 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

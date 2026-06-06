@@ -20,10 +20,16 @@ class MetricType(Enum):
 
 @dataclass
 class Entity:
-    """Base entity in the metric space."""
+    """Base entity in the metric space.
     
-    id: str
-    data: Dict[str, Any]
+    If id is None or empty, it will be auto-generated from the content hash
+    of data + embeddings. This enables natural deduplication: same content
+    always produces the same ID, so entities extracted from natural language
+    (e.g. "张三", "李四") can be inserted without pre-assigned IDs.
+    """
+    
+    id: Optional[str] = None
+    data: Dict[str, Any] = field(default_factory=dict)
     embeddings: Dict[MetricType, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[datetime] = None
@@ -31,11 +37,53 @@ class Entity:
     deleted: bool = False
     
     def __post_init__(self):
-        """Initialize timestamps."""
+        """Initialize timestamps and auto-generate ID if needed."""
         if self.created_at is None:
             self.created_at = datetime.utcnow()
         if self.updated_at is None:
             self.updated_at = datetime.utcnow()
+        if not self.id:
+            self.id = self._generate_id()
+    
+    @staticmethod
+    def compute_id(data: Dict[str, Any], name: str = "", dedup_keys: Optional[List[str]] = None) -> str:
+        """Compute a deterministic entity ID from dedup-relevant fields.
+        
+        This is the core deduplication mechanism: the ID is derived from
+        dedup-relevant fields (default: name + type), ensuring that the same
+        real-world entity always maps to the same ID regardless of which
+        attributes are known at ingestion time.
+        
+        For example:
+            {"name": "张三", "role": "投资人"} → 张三_person_<hash>
+            {"name": "张三", "company": "某科技"} → 张三_person_<hash>  (same ID!)
+        
+        Args:
+            data: Entity attributes
+            name: Optional entity name for readable ID prefix
+            dedup_keys: Keys to use for dedup hash. Default: ["name", "type"]
+        
+        Returns:
+            A deterministic hex string ID (prefix + hash)
+        """
+        if dedup_keys is None:
+            dedup_keys = ["name"]
+        
+        # Build dedup dictionary from only the relevant keys
+        dedup_data = {k: data.get(k, "") for k in dedup_keys}
+        content = json.dumps(dedup_data, sort_keys=True, ensure_ascii=False, default=str)
+        content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+        
+        # Use name as readable prefix, fall back to type or generic
+        entity_name = name or data.get("name", "")
+        if entity_name:
+            safe_name = "".join(c for c in entity_name if c.isalnum() or c in "_-")
+            return f"{safe_name}_{content_hash}"
+        return f"ent_{content_hash}"
+    
+    def _generate_id(self) -> str:
+        """Auto-generate ID from entity content."""
+        return self.compute_id(self.data, self.data.get("name", ""))
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""

@@ -4,6 +4,7 @@ Core MetricSpace implementation - the unified data structure for TriGraphX.
 
 from typing import Dict, List, Optional, Tuple, Set, Any
 from dataclasses import dataclass, field
+from datetime import datetime
 import numpy as np
 from collections import defaultdict
 import heapq
@@ -97,6 +98,107 @@ class MetricSpace:
             self.embedding_index[MetricType.CAUSAL][entity.id] = emb
         
         return True
+    
+    def upsert_entity(self, entity: Entity, merge_data: bool = True) -> Tuple[Entity, bool]:
+        """Insert or update an entity. Returns (entity, created).
+        
+        If an entity with the same ID already exists, updates its data and
+        embeddings (merging by default). If it doesn't exist, creates it.
+        
+        This is the primary method for natural language ingestion pipelines:
+        entities extracted from text (e.g. "张三") can be upserted without
+        worrying about whether they already exist in the database.
+        
+        Args:
+            entity: The entity to upsert
+            merge_data: If True and entity exists, deep-merge data dicts.
+                       If False, replaces data entirely.
+        
+        Returns:
+            Tuple of (entity, created_flag)
+        """
+        if entity.id in self.entities:
+            existing = self.entities[entity.id]
+            if merge_data:
+                existing.data.update(entity.data)
+            else:
+                existing.data = entity.data
+            existing.embeddings.update(entity.embeddings)
+            existing.metadata.update(entity.metadata)
+            existing.updated_at = datetime.utcnow()
+            # Re-index
+            self._update_indices(entity.id, existing)
+            return existing, False
+        else:
+            self.add_entity(entity)
+            return entity, True
+    
+    def ingest(self, data: Dict[str, Any], 
+               embeddings: Optional[Dict[MetricType, Any]] = None,
+               metadata: Optional[Dict[str, Any]] = None,
+               dedup_keys: Optional[List[str]] = None) -> Tuple[Entity, bool]:
+        """Ingest raw data as an entity. Auto-generates ID from dedup keys.
+        
+        This is the natural language ingestion entry point:
+        
+            space.ingest({"name": "张三", "type": "person", "role": "投资人"})
+            space.ingest({"name": "李四", "type": "person", "company": "某科技"})
+        
+        Same dedup keys always produce the same ID, enabling automatic deduplication.
+        By default, only the "name" field is used for deduplication, so the same
+        entity mentioned in different contexts will be recognized as the same entity.
+        
+        Args:
+            data: Entity attributes (must include 'name' for readable IDs)
+            embeddings: Optional pre-computed embeddings
+            metadata: Optional metadata
+            dedup_keys: Keys to use for dedup hash. Default: ["name"]
+        
+        Returns:
+            Tuple of (entity, created_flag)
+        """
+        # Pre-compute the ID from dedup keys for consistent deduplication
+        entity_id = Entity.compute_id(data, dedup_keys=dedup_keys)
+        entity = Entity(
+            id=entity_id,
+            data=data,
+            embeddings=embeddings or {},
+            metadata=metadata or {},
+        )
+        return self.upsert_entity(entity)
+    
+    def _update_indices(self, entity_id: str, entity: Entity):
+        """Update indices for an existing entity."""
+        # Clear old indices
+        for mt in MetricType:
+            self.embedding_index[mt].pop(entity_id, None)
+        
+        # Rebuild indices
+        if MetricType.HIERARCHY in entity.embeddings:
+            emb = entity.embeddings[MetricType.HIERARCHY]
+            if isinstance(emb, dict):
+                emb = HierarchyEmbedding.from_dict(emb)
+            if emb.parent_id:
+                self.hierarchy_index[emb.parent_id].add(entity_id)
+            self.embedding_index[MetricType.HIERARCHY][entity_id] = emb
+        
+        if MetricType.SEMANTIC in entity.embeddings:
+            emb = entity.embeddings[MetricType.SEMANTIC]
+            if isinstance(emb, dict):
+                emb = SemanticEmbedding.from_dict(emb)
+            self.embedding_index[MetricType.SEMANTIC][entity_id] = emb
+        
+        if MetricType.ASSOCIATION in entity.embeddings:
+            emb = entity.embeddings[MetricType.ASSOCIATION]
+            if isinstance(emb, dict):
+                emb = AssociationEmbedding.from_dict(emb)
+            self.embedding_index[MetricType.ASSOCIATION][entity_id] = emb
+        
+        if MetricType.CAUSAL in entity.embeddings:
+            emb = entity.embeddings[MetricType.CAUSAL]
+            if isinstance(emb, dict):
+                emb = CausalEmbedding.from_dict(emb)
+            self.embedding_index[MetricType.CAUSAL][entity_id] = emb
     
     def get_entity(self, entity_id: str, include_deleted: bool = False) -> Optional[Entity]:
         """Retrieve an entity by ID."""
@@ -394,3 +496,9 @@ class MetricSpace:
             "utilization": active_entities / self.max_entities,
             "embeddings_count": dict(embeddings_count),
         }
+    
+    def entity_count(self, include_deleted: bool = False) -> int:
+        """Return the number of entities in the space."""
+        if include_deleted:
+            return len(self.entities)
+        return sum(1 for e in self.entities.values() if not e.deleted)
