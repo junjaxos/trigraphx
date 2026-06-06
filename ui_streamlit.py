@@ -430,14 +430,19 @@ elif page == "📈 可视化":
                 labels = []
                 
                 for eid, entity in list(st.session_state.space.entities.items())[:100]:
-                    if "semantic" in entity.embeddings and entity.embeddings["semantic"]:
-                        if entity.embeddings["semantic"]:
-                            vectors.append(entity.embeddings["semantic"][0].embedding)
-                            labels.append(eid)
+                    if MetricType.SEMANTIC in entity.embeddings:
+                        emb = entity.embeddings[MetricType.SEMANTIC]
+                        if isinstance(emb, dict):
+                            emb = SemanticEmbedding.from_dict(emb)
+                        if hasattr(emb, 'vector') and emb.vector:
+                            vectors.append(emb.vector)
+                            labels.append(entity.data.get("name", eid))
                 
-                if len(vectors) > 1:
+                if len(vectors) >= 2:
                     X = np.array(vectors)
-                    tsne = TSNE(n_components=2, random_state=42)
+                    # t-SNE perplexity must be < n_samples
+                    perplexity = min(30.0, len(vectors) - 1)
+                    tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
                     X_2d = tsne.fit_transform(X)
                     
                     df_viz = pd.DataFrame({
@@ -544,7 +549,8 @@ elif page == "💾 数据管理":
                         embeddings = {}
                         if add_semantic:
                             import numpy as np
-                            vec = np.random.randn(10).tolist()
+                            # Generate 384-dim vector (matching all-MiniLM-L6-v2)
+                            vec = np.random.randn(384).tolist()
                             embeddings[MetricType.SEMANTIC] = SemanticEmbedding(vector=vec)
                         if add_hierarchy:
                             embeddings[MetricType.HIERARCHY] = HierarchyEmbedding(level=1, parent=None)

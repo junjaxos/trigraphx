@@ -88,8 +88,8 @@
                   
 
                   // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"color": "#97c2fc", "id": "entity_741", "label": "entity_741", "shape": "dot", "title": "{\"name\": \"test\", \"value\": 100}"}, {"color": "#97c2fc", "id": "entity_752", "label": "entity_752", "shape": "dot", "title": "{\"name\": \"test\", \"value\": 100}"}, {"color": "#97c2fc", "id": "entity_761", "label": "entity_761", "shape": "dot", "title": "{\"name\": \"test\", \"value\": 100}"}]);
-                  edges = new vis.DataSet([{"arrows": "to", "from": "entity_741", "to": "entity_752"}, {"arrows": "to", "from": "entity_741", "to": "entity_761"}, {"arrows": "to", "from": "entity_752", "to": "entity_761"}, {"arrows": "to", "from": "entity_752", "to": "entity_741"}, {"arrows": "to", "from": "entity_761", "to": "entity_752"}, {"arrows": "to", "from": "entity_761", "to": "entity_741"}]);
+                  nodes = new vis.DataSet([{"color": "#97c2fc", "id": "\u6797\u4fca\u6770_65da68aa5538c7e6", "label": "\u6797\u4fca\u6770_65da68aa5538c7e6", "shape": "dot", "title": "{\"type\": \"person\", \"role\": \"\\u6295\\u8d44\\u4eba\", \"name\": \"\\u6797\\u4fca\\u6770\"}"}, {"color": "#97c2fc", "id": "\u6797\u4fca\u6770766_54051dbc17385b05", "label": "\u6797\u4fca\u6770766_54051dbc17385b05", "shape": "dot", "title": "{\"type\": \"person\", \"role\": \"\\u6295\\u8d44\\u4eba\", \"name\": \"\\u6797\\u4fca\\u6770766\"}"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "from": "\u6797\u4fca\u6770_65da68aa5538c7e6", "to": "\u6797\u4fca\u6770766_54051dbc17385b05"}, {"arrows": "to", "from": "\u6797\u4fca\u6770766_54051dbc17385b05", "to": "\u6797\u4fca\u6770_65da68aa5538c7e6"}]);
 
                   nodeColors = {};
                   allNodes = nodes.get({ returnType: "Object" });
