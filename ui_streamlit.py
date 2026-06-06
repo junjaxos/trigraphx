@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import time
 
-from trigraphx import Entity, MetricType, MetricSpace, SemanticEmbedding, HierarchyEmbedding
+from trigraphx import Entity, MetricType, MetricSpace, SemanticEmbedding, HierarchyEmbedding, config
 from trigraphx.persistence import PersistenceLayer
 from trigraphx.enterprise import RoleBasedAccessControl, Role, DataQualityReport
 
@@ -47,11 +47,11 @@ st.markdown("""
 # ============================================================================
 
 if 'space' not in st.session_state:
-    st.session_state.space = MetricSpace(max_entities=10000)
+    st.session_state.space = MetricSpace(max_entities=config.max_entities)
 
 if 'persistence' not in st.session_state:
-    db_root = Path("trigraphx_data")
-    st.session_state.persistence = PersistenceLayer(db_root)
+    config.ensure_dirs()
+    st.session_state.persistence = PersistenceLayer(str(config.data_dir), batch_size=config.batch_size)
 
 if 'query_history' not in st.session_state:
     st.session_state.query_history = []
@@ -706,7 +706,7 @@ elif page == "ℹ️ 帮助":
     ## FAQ
     
     **Q: 数据持久化在哪里?**  
-    A: 默认存储在 `trigraphx_data/` 目录，包括:
+    A: 默认存储在 `trigraphx_data/` 目录，可通过环境变量 `TRIGRAPHX_DATA_DIR` 自定义。包括:
     - JSONL 格式的实体批次
     - SQLite 索引
     - tar.gz 检查点备份

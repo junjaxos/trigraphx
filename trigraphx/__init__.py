@@ -14,6 +14,7 @@ from .entity import (
 )
 from .space import MetricSpace, QueryResult
 from .persistence import PersistenceLayer
+from .config import Config, config
 
 # Optional Rust acceleration
 try:
@@ -30,6 +31,8 @@ __all__ = [
     "MetricSpace",
     "QueryResult",
     "PersistenceLayer",
+    "Config",
+    "config",
     "SemanticEmbedding",
     "HierarchyEmbedding",
     "AssociationEmbedding",

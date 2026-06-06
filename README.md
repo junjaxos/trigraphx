@@ -23,56 +23,84 @@ cd trigraphx_rust && maturin develop
 ### Basic Usage
 
 ```python
-from trigraphx_core import MetricSpace, Entity, MetricType, SemanticEmbedding
+from trigraphx import MetricSpace, MetricType, SemanticEmbedding, config
 
 # Create metric space
-space = MetricSpace(max_entities=1_000_000)
+space = MetricSpace(max_entities=config.max_entities)
 
-# Add entities with semantic embeddings
-entity = Entity(
-    id="doc_001",
-    data={"content": "Hello world"},
-    embeddings={
-        MetricType.SEMANTIC: SemanticEmbedding(
-            vector=[0.1, 0.2, 0.3, 0.4]
-        )
-    }
+# Natural language ingestion (auto-ID, auto-dedup)
+# No need to manually assign IDs — same name = same entity
+entity, created = space.ingest({"name": "张三", "type": "person", "role": "投资人"})
+print(f"ID: {entity.id}, created: {created}")  # ID: 张三_<hash>, created: True
+
+# Same entity mentioned again — data merges automatically
+entity2, created2 = space.ingest({"name": "张三", "company": "红杉资本"})
+print(f"ID: {entity2.id}, created: {created2}")  # Same ID, created: False
+print(entity2.data)  # {"name": "张三", "type": "person", "role": "投资人", "company": "红杉资本"}
+
+# Add embeddings
+space.ingest(
+    {"name": "doc_001", "content": "Hello world"},
+    embeddings={MetricType.SEMANTIC: SemanticEmbedding(vector=[0.1, 0.2, 0.3, 0.4])}
 )
-space.add_entity(entity)
 
 # Query: KNN, Range, or Multi-metric
-result = space.knn_query("doc_001", k=10, metric_type=MetricType.SEMANTIC)
+result = space.knn_query(entity.id, k=10, metric_type=MetricType.SEMANTIC)
 print(result.entity_ids)  # Top 10 nearest neighbors
 print(result.scores)      # Normalized distances (0-1)
+```
+
+## ⚙️ Configuration
+
+All settings are centralized in `trigraphx/config.py`. Override via environment variables:
+
+```bash
+# Data storage directory (default: trigraphx_data/)
+export TRIGRAPHX_DATA_DIR=/path/to/my/data
+
+# Max entities in MetricSpace (default: 10000)
+export TRIGRAPHX_MAX_ENTITIES=100000
+
+# Batch size for JSONL persistence (default: 10000)
+export TRIGRAPHX_BATCH_SIZE=5000
+
+# Log level (default: INFO)
+export TRIGRAPHX_LOG_LEVEL=DEBUG
+```
+
+```python
+from trigraphx import config
+
+# Access or modify programmatically
+config.data_dir = "/custom/path"
+config.max_entities = 50000
+config.ensure_dirs()  # Create all directory structure
 ```
 
 ## 📋 Project Structure
 
 ```
-triveg/
-├── trigraphx_core/              # Python core (1500+ lines)
+trigraphx/
+├── trigraphx/                  # Python core
 │   ├── __init__.py
-│   ├── entity.py            # Entity, Embeddings, Metrics
-│   ├── space.py             # MetricSpace (KNN, Range, Multi-metric queries)
-│   ├── persistence.py       # JSONL + SQLite + Checkpointing
-│   └── enterprise.py        # RBAC, Encryption, Versioning, etc.
+│   ├── config.py           # Centralized configuration
+│   ├── entity.py           # Entity, Embeddings, Distance Metrics
+│   ├── space.py            # MetricSpace (KNN, Range, Multi-metric, ingest)
+│   ├── persistence.py      # JSONL + SQLite + Checkpointing
+│   └── enterprise.py       # RBAC, Encryption, Versioning, etc.
 │
-├── trigraphx_rust/              # Rust acceleration (1400+ lines)
+├── trigraphx_rust/             # Rust acceleration
 │   ├── Cargo.toml
-│   ├── src/
-│   │   ├── lib.rs          # PyO3 bindings
-│   │   ├── lsh.rs          # LSH indexing
-│   │   ├── metrics.rs      # Optimized distance computation
-│   │   └── quantize.rs     # Vector quantization (f32 -> i8)
-│   └── tests/
+│   └── src/
 │
-├── tests/                   # Test suite (1000+ lines)
-│   ├── test_core.py        # Unit tests for all components
-│   └── test_benchmark.py   # Performance benchmarks
+├── tests/                      # Test suite (150+ tests)
+│   ├── test_core.py
+│   ├── test_comprehensive.py
+│   └── test_benchmark.py
 │
-├── TriGraphX_NEW_DATABASE_MODEL.md
-├── TriGraphX_QUICK_START.md
-└── README.md (this file)
+├── ui_streamlit.py             # Interactive dashboard
+├── pyproject.toml
+└── README.md
 ```
 
 ## 🎯 Core Features
@@ -101,28 +129,35 @@ result = space.multi_metric_query("item_1", k=5, metric_weights={
 ### 2. **Complete CRUD Operations**
 
 ```python
-# Create
+# Create — auto-ID, auto-dedup
+entity, created = space.ingest({"name": "user_1", "type": "user"})
+
+# Create — explicit ID
+entity = Entity(id="custom_id", data={"name": "explicit"})
 space.add_entity(entity)
 
+# Upsert — insert if new, update if exists
+entity, created = space.upsert_entity(entity, merge_data=True)
+
 # Read
-entity = space.get_entity("entity_id")
+entity = space.get_entity(entity.id)
 
 # Update
-space.update_entity("entity_id", {"data": {"field": "new_value"}})
+space.update_entity(entity.id, {"data": {"field": "new_value"}})
 
 # Delete (soft - recoverable)
-space.soft_delete_entity("entity_id")
+space.soft_delete_entity(entity.id)
 
 # Delete (hard - permanent)
-space.hard_delete_entity("entity_id")
+space.hard_delete_entity(entity.id)
 ```
 
 ### 3. **Persistence with Multiple Formats**
 
 ```python
-from trigraphx_core import PersistenceLayer
+from trigraphx import PersistenceLayer, config
 
-persist = PersistenceLayer("./mrmrs_db")
+persist = PersistenceLayer(str(config.data_dir))
 
 # Save entities to JSONL
 persist.save_entities_batch(entities, batch_id=0)
@@ -145,7 +180,7 @@ persist.cleanup_old_checkpoints(keep_recent=5)
 
 #### Role-Based Access Control
 ```python
-from trigraphx_core.enterprise import RoleBasedAccessControl, Role
+from trigraphx.enterprise import RoleBasedAccessControl, Role
 
 rbac = RoleBasedAccessControl()
 rbac.assign_role("user1", Role.EDITOR)
@@ -154,7 +189,7 @@ rbac.has_permission("user1", "read", entity_id="doc_001")
 
 #### Data Encryption
 ```python
-from trigraphx_core.enterprise import DataEncryption
+from trigraphx.enterprise import DataEncryption
 
 encryption = DataEncryption(master_key="my_secret_key")
 encrypted = encryption.encrypt_field("sensitive_data")
@@ -164,7 +199,7 @@ masked = encryption.mask_pii("john.doe@example.com")
 
 #### Data Versioning & Lineage
 ```python
-from trigraphx_core.enterprise import DataVersioning, DataLineage
+from trigraphx.enterprise import DataVersioning, DataLineage
 
 versioning = DataVersioning()
 v1 = versioning.create_snapshot("entity_1", entity.to_dict(), "Initial")
@@ -184,7 +219,7 @@ lineage.track_entity_source("entity_1", "transformation", "normalization")
 
 #### Schema Validation
 ```python
-from trigraphx_core.enterprise import EntitySchema
+from trigraphx.enterprise import EntitySchema
 
 schema = EntitySchema()
 schema.define_schema("User", {
@@ -198,7 +233,7 @@ is_valid, message = schema.validate("User", entity_data)
 
 #### Data Quality & Observability
 ```python
-from trigraphx_core.enterprise import DataQualityReport, MetricsCollector, AlertingSystem
+from trigraphx.enterprise import DataQualityReport, MetricsCollector, AlertingSystem
 
 # Quality report
 report = DataQualityReport.generate_report(entities)
@@ -280,7 +315,7 @@ pip install pytest pytest-cov
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ --cov=trigraphx_core --cov-report=html
+pytest tests/ --cov=trigraphx --cov-report=html
 
 # Run only unit tests
 pytest tests/test_core.py -v
