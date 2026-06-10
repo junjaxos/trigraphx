@@ -64,3 +64,4 @@ Thumbs.db
 file/db/*.db
 file/logs/*
 !file/logs/.gitkeep
+target/
